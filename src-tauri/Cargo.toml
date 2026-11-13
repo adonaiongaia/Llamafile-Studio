@@ -1,0 +1,55 @@
+[package]
+name = "llamafile-studio"
+version = "1.0.0"
+description = "Visual compiler that packages GGUF models into standalone llamafile executables"
+authors = ["Llamafile Studio contributors"]
+license = "Apache-2.0"
+readme = "../README.md"
+edition = "2021"
+rust-version = "1.77"
+repository = "https://github.com/llamafile-studio/llamafile-studio"
+default-run = "llamafile-studio"
+
+# The library target is what Tauri's mobile/desktop entry points use; keeping
+# the logic inside a library makes it reachable from `src/main.rs` without
+# duplicating any code between the two binaries.
+[lib]
+name = "llamafile_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Core framework.
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+
+# Serialization for the command payloads / progress events.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hardware introspection for the CPU thread optimiser.
+num_cpus = "1.16"
+
+# Streaming CRC32 for the ZIP entries we write ourselves.
+crc32fast = "1.4"
+
+# Downloading the base runtime from the GitHub releases API.
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "stream",
+  "json",
+] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "rt-multi-thread"] }
+
+[profile.release]
+# A small, fast binary: the AppImage carries enough weight with WebKitGTK.
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

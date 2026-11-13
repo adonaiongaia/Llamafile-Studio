@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Everything is local: no remote fonts, scripts or styles. The policy is
+         injected by Tauri from tauri.conf.json so it can carry its own nonces. -->
+    <title>Llamafile Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body class="h-screen overflow-hidden bg-window font-sans text-ink antialiased">
+    <!-- Ambient circuitry: neon haze, engineering grid and a slow scan beam. -->
+    <div class="app-backdrop" aria-hidden="true">
+      <div class="app-backdrop__glow"></div>
+      <div class="app-backdrop__grid"></div>
+      <div class="app-backdrop__scan"></div>
+    </div>
+
+    <div class="relative z-10 flex h-screen flex-col">
+      <!-- ------------------------------------------------------------ header -->
+      <header class="app-header flex h-14 shrink-0 items-center gap-3 px-5">
+        <div class="app-mark">
+          <!-- Llama glyph: dark circuit silhouette with a neon rim. -->
+          <svg viewBox="0 0 24 24" class="relative z-10 h-[19px] w-[19px]" aria-hidden="true">
+            <path
+              d="M7.2 3.6c.5-.5 1.3-.4 1.6.3l.9 2.1h4.6l.9-2.1c.3-.7 1.1-.8 1.6-.3.4.4.5.9.3 1.4l-.7 1.6c1 .8 1.6 2 1.6 3.3v3.4c0 2.6-2.1 4.7-4.7 4.7h-1.8c-2.6 0-4.7-2.1-4.7-4.7v-3.4c0-1.3.6-2.5 1.6-3.3l-.7-1.6c-.2-.5-.1-1 .5-1.4Z"
+              fill="#04060e"
+              stroke="#a9f6ff"
+              stroke-width="1.1"
+              stroke-linejoin="round"
+            />
+            <circle cx="9.6" cy="10.4" r="1" fill="#3fe3ff" />
+            <circle cx="14.4" cy="10.4" r="1" fill="#3fe3ff" />
+            <path
+              d="M10.2 14.2h3.6"
+              stroke="#3fe3ff"
+              stroke-width="1.1"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+
+        <div class="min-w-0">
+          <h1 class="neon-title truncate text-[15px] font-bold leading-tight">Llamafile Studio</h1>
+          <p class="hud-caption truncate leading-tight">
+            Compile a GGUF model into one standalone executable
+          </p>
+        </div>
+
+        <div class="ml-auto flex items-center gap-2">
+          <span
+            id="systemChip"
+            class="chip border-line bg-window/60 text-[11.5px] text-inkmuted"
+            title="Detected hardware"
+          >
+            <span class="h-1.5 w-1.5 animate-pulsebar rounded-full bg-success"></span>
+            <span id="systemChipText">detecting hardware…</span>
+          </span>
+        </div>
+      </header>
+
+      <!-- -------------------------------------------------------------- tabs -->
+      <nav
+        class="flex shrink-0 items-end gap-1 border-b border-line bg-panel/70 px-3 pt-2 backdrop-blur-[3px]
+        role="tablist"
+        aria-label="Configuration sections"
+      >
+        <button
+          class="tab"
+          role="tab"
+          id="tab-files"
+          data-tab="files"
+          aria-selected="true"
+          aria-controls="panel-files"
+        >
+          <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3l1.4 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6A1.2 1.2 0 0 1 13 13H3a1.2 1.2 0 0 1-1.2-1.2V4.2Z" />
+          </svg>
+          Files
+        </button>
+        <button
+          class="tab"
+          role="tab"
+          id="tab-models"
+          data-tab="models"
+          aria-selected="false"
+          aria-controls="panel-models"
+        >
+          <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="7" cy="7" r="4.4" />
+            <path d="m10.4 10.4 3 3" stroke-linecap="round" />
+            <path d="M5.2 5.6h3.6M5.2 7.6h2.4" stroke-linecap="round" />
+          </svg>
+          Models
+        </button>
+        <button
+          class="tab"
+          role="tab"
+          id="tab-persona"
+          data-tab="persona"
+          aria-selected="false"
+          aria-controls="panel-persona"
+        >
+          <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2.5 3.5h11v7h-6l-3.4 2.6v-2.6H2.5z" stroke-linejoin="round" />
+            <path d="M5.2 6.2h5.6M5.2 8.2h3.4" stroke-linecap="round" />
+          </svg>
+          Prompt / Persona
+        </button>
+        <button
+          class="tab"
+          role="tab"
+          id="tab-settings"
+          data-tab="settings"
+          aria-selected="false"
+          aria-controls="panel-settings"
+        >
+          <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="2.2" />
+            <path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3" stroke-linecap="round" />
+          </svg>
+          Settings
+        </button>
+
+        <span class="ml-auto pb-2 pr-2 font-mono text-[11px] tracking-[0.18em] text-inkfaint">v1.0.0</span>
+      </nav>
+
+      <!-- -------------------------------------------------------------- main -->
+      <main class="flex-1 overflow-y-auto px-5 py-5">
+        <div class="mx-auto w-full max-w-[1080px]">
+          <!-- =================================================== FILES PANEL -->
+          <section
+            id="panel-files"
+            role="tabpanel"
+            aria-labelledby="tab-files"
+            data-panel="files"
+            class="animate-fade-up space-y-4"
+          >
+            <!-- base runtime -->
+            <div class="card p-4">
+              <div class="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h2 class="card-title">1 · Base runtime</h2>
+                  <p class="mt-1 text-[12.5px] text-inkmuted">
+                    The pristine <span class="font-mono text-inkfaint">llamafile</span> APE binary that
+                    the model and arguments get appended to.
+                  </p>
+                </div>
+                <span
+                  id="runtimeBadge"
+                  class="chip shrink-0 border-line bg-window/60 text-[11px] text-inkfaint"
+                  >not set</span
+                >
+              </div>
+
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex min-w-0 flex-1 items-center gap-2 rounded-adwaita border border-linestrong bg-window px-3 py-2"
+                >
+                  <svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0 text-inkfaint" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <rect x="2.5" y="3.5" width="11" height="9" rx="1.2" />
+                    <path d="M6 6.6 8 8.4 6 10.2M9 10.4h2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <input
+                    id="runtimePath"
+                    type="text"
+                    spellcheck="false"
+                    placeholder="/usr/local/bin/llamafile"
+                    aria-label="Base runtime path"
+                    class="w-full border-0 bg-transparent font-mono text-[12.5px] text-inksoft outline-none placeholder-inkfaint"
+                  />
+                </div>
+                <button id="btnPickRuntime" class="btn-secondary shrink-0">Browse…</button>
+                <button id="btnDownloadRuntime" class="btn-secondary shrink-0">
+                  <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M8 2.6v7.2M5.2 7.2 8 10l2.8-2.8M2.6 12.4h10.8" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  Download latest
+                </button>
+              </div>
+
+              <p id="runtimeMeta" class="hint mt-2">No runtime selected yet.</p>
+
+              <!-- download offer -->
+              <div id="downloadOffer" hidden class="mt-3 rounded-adwaita border border-line bg-window p-3">
+                <div class="flex flex-wrap items-center gap-3">
+                  <div class="min-w-0 flex-1">
+                    <p id="offerText" class="text-[12.5px] text-inksoft"></p>
+                    <p id="offerSub" class="hint mt-0.5"></p>
+                  </div>
+                  <select id="offerAlt" class="field w-auto max-w-[280px] py-1.5 text-[12.5px]"></select>
+                  <button id="btnStartDownload" class="btn-primary shrink-0">Download</button>
+                  <button id="btnCancelOffer" class="btn-ghost shrink-0">Cancel</button>
+                </div>
+                <div id="downloadWrap" hidden class="mt-3">
+                  <div class="h-1.5 w-full overflow-hidden rounded-pill bg-raised">
+                    <div id="downloadBar" class="progress-fill" style="width: 0%"></div>
+                  </div>
+                  <p id="downloadText" class="hint mt-1.5"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- model -->
+            <div class="card p-4">
+              <div class="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h2 class="card-title">2 · GGUF model</h2>
+                  <p class="mt-1 text-[12.5px] text-inkmuted">
+                    Quantised weights, typically 0.5–8&nbsp;GB. It is embedded uncompressed so the runtime
+                    can map it straight into memory.
+                  </p>
+                </div>
+                <span id="modelBadge" class="chip shrink-0 border-line bg-window/60 text-[11px] text-inkfaint">not set</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <div class="flex min-w-0 flex-1 items-center gap-2 rounded-adwaita border border-linestrong bg-window px-3 py-2">
+                  <svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0 text-inkfaint" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <path d="M8 2.2 13.2 5v6L8 13.8 2.8 11V5z" stroke-linejoin="round" />
+                    <path d="M2.8 5 8 7.8 13.2 5M8 7.8v6" />
+                  </svg>
+                  <input
+                    id="modelPath"
+                    type="text"
+                    spellcheck="false"
+                    placeholder="/home/you/models/TinyLlama-1.1B.Q4_K_M.gguf"
+                    aria-label="GGUF model path"
+                    class="w-full border-0 bg-transparent font-mono text-[12.5px] text-inksoft outline-none placeholder-inkfaint"
+                  />
+                </div>
+                <button id="btnBrowseModels" class="btn-secondary shrink-0">Browse Hugging Face…</button>
+                <button id="btnPickModel" class="btn-secondary shrink-0">Choose .gguf…</button>
+              </div>
+              <p id="modelMeta" class="hint mt-2">No model selected yet.</p>
+
+              <!-- optional vision projector -->
+              <div class="mt-4 rounded-adwaita border border-line bg-window/50 p-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-[12.5px] font-semibold">
+                      Vision projector
+                      <span class="font-normal text-inkfaint">(mmproj, optional)</span>
+                    </p>
+                    <p class="hint mt-0.5">
+                      Multimodal models need a matching projector GGUF. It is embedded next to the
+                      weights and wired up with <span class="font-mono">--mmproj</span>.
+                    </p>
+                  </div>
+                  <button id="btnClearMmproj" class="btn-ghost shrink-0 px-2.5 py-1 text-[12px]" hidden>
+                    Remove
+                  </button>
+                </div>
+                <div class="mt-2 flex items-center gap-2">
+                  <input
+                    id="mmprojPath"
+                    type="text"
+                    spellcheck="false"
+                    placeholder="/home/you/Models/mmproj-model-f16.gguf"
+                    aria-label="Vision projector path"
+                    class="field flex-1 font-mono text-[12px]"
+                  />
+                  <button id="btnPickMmproj" class="btn-secondary shrink-0">Choose…</button>
+                </div>
+                <p id="mmprojMeta" class="hint mt-1.5">No projector attached.</p>
+
+                <!-- offered automatically after a vision model is downloaded -->
+                <div
+                  id="mmprojOffer"
+                  class="mt-2 rounded-adwaita border border-violet/40 bg-violetsoft p-2.5"
+                  hidden
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <p class="text-[12px] font-semibold text-violetink">This model accepts images</p>
+                    <button
+                      id="btnDismissProjectorOffer"
+                      class="shrink-0 text-[11px] text-inkfaint transition-colors hover:text-ink"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <p id="mmprojOfferText" class="hint mt-0.5"></p>
+                  <div id="mmprojOfferList" class="mt-2 space-y-1"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- output -->
+            <div class="card p-4">
+              <div class="mb-3">
+                <h2 class="card-title">3 · Output executable</h2>
+                <p class="mt-1 text-[12.5px] text-inkmuted">
+                  Where the finished, double-clickable <span class="font-mono text-inkfaint">.llamafile</span>
+                  should be written.
+                </p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <div class="flex min-w-0 flex-1 items-center gap-2 rounded-adwaita border border-linestrong bg-window px-3 py-2">
+                  <svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0 text-inkfaint" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <path d="M8 2.6v7.2M5.2 7.2 8 10l2.8-2.8" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M2.6 11.4v1.4c0 .5.4.8.9.8h9c.5 0 .9-.3.9-.8v-1.4" stroke-linecap="round" />
+                  </svg>
+                  <input
+                    id="outputPath"
+                    type="text"
+                    spellcheck="false"
+                    placeholder="/home/you/Models/my-assistant.llamafile"
+                    aria-label="Output path"
+                    class="w-full border-0 bg-transparent font-mono text-[12.5px] text-inksoft outline-none placeholder-inkfaint"
+                  />
+                </div>
+                <button id="btnPickOutput" class="btn-secondary shrink-0">Save as…</button>
+              </div>
+              <p id="outputMeta" class="hint mt-2">
+                The file will be created with mode 0755 and end in <span class="font-mono">.llamafile</span>.
+              </p>
+            </div>
+          </section>
+
+          <!-- ================================================== MODELS PANEL -->
+          <section
+            id="panel-models"
+            role="tabpanel"
+            aria-labelledby="tab-models"
+            data-panel="models"
+            class="animate-fade-up space-y-4"
+            hidden
+          >
+            <!-- search -->
+            <div class="card p-4">
+              <div class="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h2 class="card-title">Hugging Face browser</h2>
+                  <p class="mt-1 text-[12.5px] text-inkmuted">
+                    Searches public <span class="font-mono text-inkfaint">GGUF</span> repositories.
+                    Badges are detected from the model card, tags and chat template.
+                  </p>
+                </div>
+                <span id="hfCount" class="chip shrink-0 border-line bg-window/60 text-[11px] text-inkfaint">idle</span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex min-w-[220px] flex-1 items-center gap-2 rounded-adwaita border border-linestrong bg-window px-3 py-2">
+                  <svg viewBox="0 0 16 16" class="h-4 w-4 shrink-0 text-inkfaint" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="7" cy="7" r="4.4" />
+                    <path d="m10.4 10.4 3 3" stroke-linecap="round" />
+                  </svg>
+                  <input
+                    id="hfQuery"
+                    type="text"
+                    spellcheck="false"
+                    placeholder="qwen3, llama 3, gemma, deepseek-r1…"
+                    aria-label="Search Hugging Face"
+                    class="w-full border-0 bg-transparent text-[13px] text-inksoft outline-none placeholder-inkfaint"
+                  />
+                </div>
+                <select id="hfSort" class="field w-auto py-2 text-[12.5px]" aria-label="Sort results">
+                  <option value="downloads">Most downloaded</option>
+                  <option value="likes">Most liked</option>
+                  <option value="lastModified">Recently updated</option>
+                </select>
+                <button id="btnHfSearch" class="btn-primary shrink-0">Search</button>
+              </div>
+
+              <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                <span class="mr-1 text-[11px] font-semibold uppercase tracking-wider text-inkfaint">Filter</span>
+                <button class="hf-filter chip cursor-pointer transition-colors hover:border-accent hover:text-ink" data-cap="toolUse" aria-pressed="false">Tool calling</button>
+                <button class="hf-filter chip cursor-pointer transition-colors hover:border-accent hover:text-ink" data-cap="reasoning" aria-pressed="false">Thinking</button>
+                <button class="hf-filter chip cursor-pointer transition-colors hover:border-accent hover:text-ink" data-cap="vision" aria-pressed="false">Vision</button>
+                <button class="hf-filter chip cursor-pointer transition-colors hover:border-accent hover:text-ink" data-cap="moe" aria-pressed="false">MoE</button>
+                <button class="hf-filter chip cursor-pointer transition-colors hover:border-accent hover:text-ink" data-cap="code" aria-pressed="false">Code</button>
+              </div>
+            </div>
+
+            <!-- destination -->
+            <div class="card p-4">
+              <div class="flex flex-wrap items-end gap-3">
+                <div class="min-w-[240px] flex-1">
+                  <label class="label" for="hfTarget">Save downloaded models to</label>
+                  <input id="hfTarget" type="text" spellcheck="false" class="field font-mono text-[12.5px]" />
+                </div>
+                <button id="btnHfTarget" class="btn-secondary shrink-0">Change…</button>
+              </div>
+            </div>
+
+            <!-- downloaded models -->
+            <div class="card p-4">
+              <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <h2 class="card-title">Downloaded models</h2>
+                  <p id="cacheSummary" class="hint mt-1">Scanning the download folder…</p>
+                </div>
+                <button id="btnRefreshCache" class="btn-secondary shrink-0">Refresh</button>
+              </div>
+              <div id="cacheList" class="space-y-1"></div>
+            </div>
+
+            <!-- active download -->
+            <div id="hfProgressCard" class="card p-4" hidden>
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="card-title">Downloading</p>
+                  <p id="hfProgressFile" class="mt-1 truncate font-mono text-[12.5px] text-inksoft"></p>
+                </div>
+                <button id="btnHfCancel" class="btn-ghost shrink-0 px-2.5 py-1.5 text-[12px]">Cancel</button>
+              </div>
+              <div class="mt-3 h-2 w-full overflow-hidden rounded-pill bg-raised">
+                <div id="hfBar" class="progress-fill w-0" style="width: 0%"></div>
+              </div>
+              <p id="hfProgressText" class="hint mt-1.5 font-mono"></p>
+            </div>
+
+            <!-- results -->
+            <div id="hfResults" class="space-y-3"></div>
+
+            <div id="hfEmpty" class="card p-8 text-center">
+              <p class="text-[13px] font-semibold text-inksoft">Search for a model to get started</p>
+              <p class="hint mx-auto mt-1 max-w-md">
+                Leave the box empty and press Search to list the most popular GGUF repositories,
+                or try <span class="font-mono">qwen3</span>, <span class="font-mono">gemma</span> or
+                <span class="font-mono">deepseek-r1</span>.
+              </p>
+            </div>
+          </section>
+
+          <!-- ================================================= PERSONA PANEL -->
+          <section
+            id="panel-persona"
+            role="tabpanel"
+            aria-labelledby="tab-persona"
+            data-panel="persona"
+            class="animate-fade-up space-y-4"
+            hidden
+          >
+            <div class="card p-4">
+              <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 class="card-title">Persona template</h2>
+                  <p class="mt-1 text-[12.5px] text-inkmuted">
+                    Start from an archetype, then edit freely. Templates only fill the canvas below.
+                  </p>
+                </div>
+                <select id="templateSelect" class="field w-auto min-w-[240px] py-1.5 text-[12.5px]" aria-label="Persona template">
+                  <option value="">Choose a template…</option>
+                </select>
+              </div>
+
+              <label class="label" for="systemPrompt">System prompt</label>
+              <textarea
+                id="systemPrompt"
+                rows="12"
+                spellcheck="true"
+                maxlength="8000"
+                placeholder="You are a concise, precise assistant. Answer in short paragraphs and cite file paths with backticks."
+                class="field resize-y font-mono text-[12.5px] leading-relaxed"
+              ></textarea>
+
+              <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p id="promptMeta" class="hint font-mono">0 lines · 0 / 8000 characters</p>
+                <button id="btnClearPrompt" class="btn-ghost px-2.5 py-1 text-[12px]">Clear</button>
+              </div>
+
+              <div
+                id="personaNote"
+                class="mt-3 flex items-start gap-2 rounded-adwaita border border-warning/35 bg-warningsoft px-3 py-2.5 text-[12px] leading-relaxed text-warnink"
+                hidden
+              >
+                <svg viewBox="0 0 16 16" class="mt-0.5 h-4 w-4 shrink-0" fill="currentColor">
+                  <path d="M8 1.8 15 14H1L8 1.8Zm0 3.7a.8.8 0 0 0-.8.9l.25 3.4a.55.55 0 0 0 1.1 0l.25-3.4A.8.8 0 0 0 8 5.5Zm0 6.1a.85.85 0 1 0 0 1.7.85.85 0 0 0 0-1.7Z" />
+                </svg>
+                <span>
+                  <strong class="font-semibold">Server mode:</strong> the persona and stop tokens are
+                  still embedded, but llamafile's HTTP server takes the system prompt and stop
+                  sequences per request. Switch to <em>Chat mode</em> to apply them automatically.
+                </span>
+              </div>
+            </div>
+
+            <div class="card p-4">
+              <div class="mb-1 flex items-start justify-between gap-3">
+                <div>
+                  <h2 class="card-title">Stop tokens</h2>
+                  <p class="mt-1 text-[12.5px] text-inkmuted">
+                    Baked in as <span class="font-mono text-inkfaint">-r</span> reverse prompts. Press
+                    Enter or comma to add.
+                  </p>
+                </div>
+                <span id="stopCount" class="chip shrink-0 border-line bg-window/60 text-[11px] text-inkfaint">0</span>
+              </div>
+
+              <div id="stopList" class="mt-3 flex flex-wrap gap-1.5"></div>
+
+              <div class="mt-2 flex items-center gap-2">
+                <input
+                  id="stopInput"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="<|endoftext|> , </s> , &lt;|im_end|&gt;"
+                  aria-label="Add a stop token"
+                  class="field flex-1 font-mono text-[12.5px]"
+                />
+                <button id="btnAddStop" class="btn-secondary shrink-0">Add</button>
+              </div>
+              <p class="hint mt-2">
+                A newline token (<span class="font-mono">\n</span>) cannot be encoded in a line-based
+                <span class="font-mono">.args</span> file; newline stopping is already active by default.
+              </p>
+            </div>
+          </section>
+
+          <!-- ================================================ SETTINGS PANEL -->
+          <section
+            id="panel-settings"
+            role="tabpanel"
+            aria-labelledby="tab-settings"
+            data-panel="settings"
+            class="animate-fade-up space-y-4"
+            hidden
+          >
+            <!-- launch behaviour -->
+            <div class="card p-4">
+              <h2 class="card-title mb-3">Launch behaviour on double-click</h2>
+              <div class="grid gap-2.5 sm:grid-cols-2">
+                <label class="mode-card">
+                  <input type="radio" name="execMode" value="server" />
+                  <div class="flex items-start gap-3">
+                    <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-inksoft">
+                      <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <circle cx="8" cy="8" r="5.6" />
+                        <path d="M1.6 8h12.8M8 2.4c1.7 2 2.6 3.7 2.6 5.6S9.7 11.6 8 13.6c-1.7-2-2.6-3.7-2.6-5.6S6.3 4.4 8 2.4Z" />
+                      </svg>
+                    </span>
+                    <span class="min-w-0">
+                      <span class="flex items-center gap-2 text-[13.5px] font-semibold">Server mode</span>
+                      <span class="mt-0.5 block font-mono text-[11.5px] text-inkfaint">--server</span>
+                      <span class="mt-1 block text-[12px] leading-snug text-inkmuted">
+                        Boots the OpenAI-compatible HTTP server with the bundled web UI.
+                      </span>
+                    </span>
+                  </div>
+                </label>
+
+                <label class="mode-card">
+                  <input type="radio" name="execMode" value="chat" />
+                  <div class="flex items-start gap-3">
+                    <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-inksoft">
+                      <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.4">
+                        <rect x="1.8" y="2.8" width="12.4" height="9.2" rx="1.3" />
+                        <path d="M4.4 6.2 6.3 8 4.4 9.8M8.2 10.2h3.2" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </span>
+                    <span class="min-w-0">
+                      <span class="flex items-center gap-2 text-[13.5px] font-semibold">Chat mode</span>
+                      <span class="mt-0.5 block font-mono text-[11.5px] text-inkfaint">--chat</span>
+                      <span class="mt-1 block text-[12px] leading-snug text-inkmuted">
+                        Spawns the interactive terminal chat with the persona preloaded.
+                      </span>
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- network -->
+            <div class="card p-4">
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <h2 class="card-title">Network binder</h2>
+                <span id="networkBadge" class="chip border-line bg-window/60 text-[11px] text-inkfaint">server only</span>
+              </div>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label" for="hostInput">Default host</label>
+                  <input id="hostInput" type="text" spellcheck="false" placeholder="127.0.0.1" class="field font-mono" />
+                </div>
+                <div>
+                  <label class="label" for="portInput">Default port</label>
+                  <input id="portInput" type="number" min="1" max="65535" step="1" placeholder="8080" class="field font-mono" />
+                </div>
+              </div>
+              <p id="networkHint" class="hint mt-2">
+                <span class="font-mono">127.0.0.1</span> keeps the server private to this machine. Use
+                <span class="font-mono">0.0.0.0</span> to expose it on your LAN.
+              </p>
+            </div>
+
+            <!-- hardware -->
+            <div class="card p-4">
+              <h2 class="card-title mb-3">Hardware acceleration &amp; memory</h2>
+
+              <div class="mb-5">
+                <div class="mb-1 flex items-baseline justify-between">
+                  <label class="label mb-0" for="gpuSlider">GPU offload layers</label>
+                  <span id="gpuValue" class="font-mono text-[12.5px] text-ink">99</span>
+                </div>
+                <input id="gpuSlider" type="range" min="0" max="120" step="1" value="99" class="slider" />
+                <div class="mt-1 flex justify-between font-mono text-[10.5px] text-inkfaint">
+                  <span>0 · CPU only</span>
+                  <span>40</span>
+                  <span>80</span>
+                  <span>120 · full offload</span>
+                </div>
+                <p id="gpuHint" class="hint mt-1.5"></p>
+              </div>
+
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="label" for="ctxSelect">Context limit</label>
+                  <select id="ctxSelect" class="field font-mono">
+                    <option value="2048">2048 tokens</option>
+                    <option value="4096">4096 tokens</option>
+                    <option value="8192">8192 tokens</option>
+                    <option value="16384">16384 tokens</option>
+                  </select>
+                  <p id="ctxWarning" class="hint mt-1.5"></p>
+                </div>
+
+                <div>
+                  <label class="label" for="threadsInput">CPU threads</label>
+                  <div class="flex gap-2">
+                    <input id="threadsInput" type="number" min="1" max="256" step="1" class="field w-24 font-mono" />
+                    <button id="btnAutoThreads" class="btn-secondary shrink-0">Auto-detect</button>
+                  </div>
+                  <p id="threadsHint" class="hint mt-1.5">Detecting cores…</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- advanced -->
+            <div class="card p-4">
+              <h2 class="card-title">Advanced arguments</h2>
+              <p class="mt-1 text-[12.5px] text-inkmuted">
+                One argument per line, appended before the trailing
+                <span class="font-mono text-inkfaint">...</span> so runtime overrides still win.
+              </p>
+              <textarea
+                id="extraArgs"
+                rows="4"
+                spellcheck="false"
+                placeholder="--temp&#10;0.7&#10;--flash-attn"
+                class="field mt-3 resize-y font-mono text-[12.5px]"
+              ></textarea>
+              <p class="hint mt-2">
+                Example: <span class="font-mono">--temp</span> with <span class="font-mono">0.7</span> on
+                the next line.
+              </p>
+            </div>
+          </section>
+
+          <!-- ============================================== RESULT / REPORT -->
+          <section id="resultCard" class="card mt-4 p-4" hidden>
+            <div class="flex items-start gap-3">
+              <span id="resultIcon" class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-successsoft text-success">
+                <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="m3.4 8.4 3 3 6.2-6.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <div class="min-w-0 flex-1">
+                <h2 id="resultTitle" class="text-[14px] font-bold">Llamafile compiled</h2>
+                <p id="resultMeta" class="mt-0.5 break-all font-mono text-[12px] text-inkmuted"></p>
+              </div>
+              <div class="flex shrink-0 gap-2">
+                <button id="btnCopyArgs" class="btn-ghost px-2.5 py-1.5 text-[12px]">Copy .args</button>
+                <button id="btnSaveReport" class="btn-ghost px-2.5 py-1.5 text-[12px]">Save report</button>
+                <button id="btnReveal" class="btn-secondary">Open folder</button>
+              </div>
+            </div>
+
+            <div id="resultWarnings" class="mt-3 space-y-1.5"></div>
+
+            <div class="mt-3 grid gap-3 lg:grid-cols-2">
+              <div>
+                <p class="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-inkfaint">Archive entries</p>
+                <div id="resultEntries" class="space-y-1 font-mono text-[11.5px] text-inkmuted"></div>
+              </div>
+              <div>
+                <p class="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-inkfaint">Build log</p>
+                <pre id="resultLog" class="max-h-40 overflow-auto rounded-adwaita border border-line bg-window p-2.5 font-mono text-[11px] leading-relaxed text-inkmuted"></pre>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <!-- ------------------------------------------------------------ footer -->
+      <footer class="app-footer shrink-0">
+        <!-- live .args preview -->
+        <div id="argsPane" class="border-b border-line px-5 py-3" hidden>
+          <div class="mx-auto flex w-full max-w-[1080px] items-start gap-3">
+            <p class="shrink-0 pt-1 text-[11.5px] font-semibold uppercase tracking-wider text-inkfaint">
+              .args preview
+            </p>
+            <div class="min-w-0 flex-1">
+              <pre id="argsWarnings" hidden class="mb-1.5 whitespace-pre-wrap rounded-adwaita border border-warning/30 bg-warningsoft px-2.5 py-1.5 font-sans text-[11.5px] leading-snug text-warnink"></pre>
+              <pre id="argsPreview" class="max-h-32 overflow-auto rounded-adwaita border border-line bg-window p-2.5 font-mono text-[11.5px] leading-relaxed text-inksoft"></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-5 py-3">
+          <div class="mx-auto flex w-full max-w-[1080px] items-center gap-4">
+            <button id="argsToggle" class="btn-ghost shrink-0 px-2.5 py-1.5 text-[12px]" aria-expanded="false" aria-controls="argsPane">
+              <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="m5.6 4.4 3.6 3.6-3.6 3.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>Show .args</span>
+            </button>
+
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-3">
+                <p id="stageLabel" class="truncate text-[12.5px] text-inkmuted">Ready to compile</p>
+                <p id="progressText" class="shrink-0 font-mono text-[11.5px] text-inkfaint"></p>
+              </div>
+              <div class="mt-1.5 h-2 w-full overflow-hidden rounded-pill bg-raised" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressWrap">
+                <div id="progressBar" class="progress-fill w-0"></div>
+              </div>
+            </div>
+
+            <button id="compileBtn" class="btn-primary shrink-0 px-5 py-2.5 text-[13.5px]" disabled>
+              <svg id="compileIcon" viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M3 2.6 12.4 8 3 13.4V2.6Z" stroke-linejoin="round" />
+              </svg>
+              <span id="compileLabel">Compile Llamafile</span>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- toasts -->
+    <div id="toasts" class="pointer-events-none fixed bottom-24 right-5 z-50 flex w-[340px] flex-col gap-2"></div>
+
+    <script src="main.js" defer></script>
+  </body>
+</html>

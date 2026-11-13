@@ -1,0 +1,19 @@
+{
+  "name": "llamafile-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Llamafile Studio - a native GTK/WebKit desktop compiler that bakes GGUF models, personas and hardware settings into a single self-contained .llamafile executable.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build:css": "tailwindcss -i ./ui/styles.src.css -o ./ui/styles.css --minify",
+    "watch:css": "tailwindcss -i ./ui/styles.src.css -o ./ui/styles.css --watch",
+    "dev": "npm run build:css && tauri dev",
+    "build": "npm run build:css && tauri build",
+    "appimage": "npm run build:css && tauri build --bundles appimage",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "tailwindcss": "3.4.17"
+  }
+}

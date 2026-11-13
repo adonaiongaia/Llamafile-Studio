@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities granted to the main Llamafile Studio window: the Tauri IPC bridge, native dialogs, read-only-ish filesystem helpers and opening the generated file in the system file manager.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:default",
+    "fs:default",
+    "opener:default",
+    "shell:default"
+  ]
+}

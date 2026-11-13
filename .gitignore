@@ -1,0 +1,14 @@
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json.bak
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Build artifacts
+dist/
+*.AppImage
+*.deb
+*.log
