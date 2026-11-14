@@ -182,7 +182,7 @@ Chat mode, persona and two stop tokens:
 4096
 -t
 6
--sysf
+-f
 /zip/persona.txt
 -r
 <|im_end|>
@@ -191,14 +191,21 @@ Chat mode, persona and two stop tokens:
 
 Server mode adds `--host 127.0.0.1 --port 8080` and omits the chat-only flags.
 
-### A note on server mode
+### How the persona is wired up
+
+`--chat` runs llamafile's terminal chatbot, which builds the conversation's
+system message from the **prompt** (`-p`, labelled "system prompt" in
+`llamafile --chat --help`) and never reads `-sys`/`-sysf`. Studio therefore
+binds the persona with `-f /zip/persona.txt`, which loads the embedded file
+into that prompt. (`-sysf` parses without error in chat mode but is silently
+ignored, so the persona would never reach the model.)
 
 llamafile's HTTP server takes the **system prompt and stop sequences per
 request** (`llama-server` rejects `-sys`/`-sysf` as unknown arguments, and
 upstream removed the server-wide prompt). Studio therefore:
 
 * always embeds the persona as `/zip/persona.txt` so it travels with the binary,
-* wires it up automatically with `-sysf` in **Chat mode**,
+* wires it up automatically with `-f` in **Chat mode**,
 * shows an explicit warning in the UI when **Server mode** is selected.
 
 That keeps generated binaries runnable instead of shipping flags the runtime

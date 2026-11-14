@@ -232,16 +232,22 @@ pub fn build(config: &CompileConfig) -> ArgsPreview {
     let mut persona_applied = false;
     if embeds_persona {
         // The persona is always embedded so it travels with the binary, but only
-        // chat/CLI mode has a flag that applies it: `-sys/--system-prompt-file`
-        // is registered for those modes only, and llama-server rejects unknown
-        // arguments outright. Server mode takes the prompt per API request.
+        // chat mode can apply it: llama-server rejects unknown arguments and
+        // takes the prompt per API request.
+        //
+        // Chat mode is llamafile's terminal chatbot, which builds the conversation
+        // system message from the *prompt* (`g_params->prompt`, documented as
+        // "system prompt" in `llamafile --chat --help`) and never reads
+        // `-sys/--system-prompt`. `-f/--file` loads a file straight into that
+        // prompt field, so the embedded persona actually reaches the model;
+        // `-sysf` parses without error but is silently ignored there.
         if is_server {
             warnings.push(
                 "persona embedded as /zip/persona.txt, but llamafile's server takes the system prompt per request - use Chat mode to bake it in"
                     .to_string(),
             );
         } else {
-            lines.push("-sysf".to_string());
+            lines.push("-f".to_string());
             lines.push(format!("{ZIP_PREFIX}{PERSONA_ENTRY}"));
             persona_applied = true;
         }
@@ -370,6 +376,7 @@ mod tests {
         let preview = build(&config);
         assert!(preview.lines.contains(&"--host".to_string()));
         assert!(preview.lines.contains(&"8080".to_string()));
+        assert!(!preview.lines.contains(&"-f".to_string()));
         assert!(!preview.lines.contains(&"-sysf".to_string()));
         assert!(preview.embeds_persona);
         assert!(!preview.persona_applied);
@@ -381,8 +388,12 @@ mod tests {
         config.system_prompt = "Answer in JSON.".to_string();
         config.stop_tokens = vec!["<|end|>".to_string(), "\\n".to_string()];
         let preview = build(&config);
-        assert!(preview.lines.contains(&"-sysf".to_string()));
+        // `--chat` takes its system message from the prompt, so the persona has
+        // to travel through `-f`; `-sysf` would be parsed and then ignored.
+        assert!(preview.lines.contains(&"-f".to_string()));
+        assert!(!preview.lines.contains(&"-sysf".to_string()));
         assert!(preview.lines.contains(&"/zip/persona.txt".to_string()));
+        assert!(preview.persona_applied);
         assert_eq!(preview.lines.iter().filter(|l| *l == "-r").count(), 1);
         assert!(preview
             .warnings

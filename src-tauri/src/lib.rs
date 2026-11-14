@@ -612,7 +612,7 @@ fn run_pipeline(
         zip.add_bytes(args::PERSONA_ENTRY, persona_payload.as_bytes())?;
         reporter.advance(persona_bytes_len);
         log.push(if preview.persona_applied {
-            "persona.txt embedded and applied via -sysf".to_string()
+            "persona.txt embedded and applied via -f (chat system prompt)".to_string()
         } else {
             "persona.txt embedded (server mode applies prompts per request)".to_string()
         });
