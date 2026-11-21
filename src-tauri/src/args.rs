@@ -50,6 +50,9 @@ pub struct CompileConfig {
     /// Optional multimodal projector (`mmproj`) GGUF used by vision models.
     #[serde(default)]
     pub mmproj: String,
+    /// Optional `ggml-*.so` / `ggml-*.dll` GPU backend plugins to bundle.
+    #[serde(default)]
+    pub gpu_libs: Vec<String>,
     #[serde(default)]
     pub stop_tokens: Vec<String>,
     /// Free-form advanced flags, one argument per line.
@@ -213,6 +216,15 @@ pub fn build(config: &CompileConfig) -> ArgsPreview {
     lines.push("-ngl".to_string());
     lines.push(gpu_layers.min(MAX_GPU_LAYERS).to_string());
 
+    // Bundled plugins are useless if every layer stays on the CPU; the runtime
+    // would load them and then never call into them.
+    if !config.gpu_libs.is_empty() && gpu_layers == 0 {
+        warnings.push(
+            "GPU libraries are bundled but -ngl 0 keeps every layer on the CPU - raise the GPU layers slider to offload"
+                .to_string(),
+        );
+    }
+
     if config.ctx_size == 0 {
         warnings.push("a context size of 0 makes the runtime use the model default".to_string());
     }
@@ -338,6 +350,7 @@ mod tests {
             threads: 6,
             system_prompt: String::new(),
             mmproj: String::new(),
+            gpu_libs: Vec::new(),
             stop_tokens: vec![],
             extra_args: String::new(),
         }
@@ -366,6 +379,21 @@ mod tests {
             .expect("--mmproj must be emitted");
         assert_eq!(preview.lines[index + 1], "/zip/mmproj-model-f16.gguf");
         assert_eq!(preview.lines.last().unwrap(), "...");
+    }
+
+    #[test]
+    fn warns_when_gpu_libraries_are_bundled_without_offload() {
+        let mut config = base_config();
+        config.gpu_libs = vec!["/tmp/ggml-cuda.so".to_string()];
+        config.gpu_layers = 0;
+        let preview = build(&config);
+        assert!(preview.errors.is_empty());
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("GPU libraries are bundled")));
+        // The plugins are discovered by the loader, never named in .args.
+        assert!(!preview.text.contains("ggml-cuda.so"));
     }
 
     #[test]

@@ -56,6 +56,7 @@ fn packages_a_real_runtime_and_model() {
         threads: 4,
         system_prompt: prompt.to_string(),
         mmproj: String::new(),
+        gpu_libs: Vec::new(),
         stop_tokens: vec!["<|end|>".to_string()],
         extra_args: String::new(),
     };
@@ -116,6 +117,104 @@ fn packages_a_real_runtime_and_model() {
     );
 }
 
+/// Verifies that GPU plugins become root archive entries under their own names.
+///
+/// The libraries are synthetic: this test asserts the archive layout llamafile's
+/// loader expects (`ggml-cuda.so` at the root, stored and aligned), not that a
+/// real CUDA kernel would run on this host.
+#[test]
+fn packages_gpu_backend_libraries_at_the_archive_root() {
+    let (Some(runtime), Some(model)) = (var("LMS_E2E_RUNTIME"), var("LMS_E2E_MODEL")) else {
+        eprintln!("LMS_E2E_RUNTIME / LMS_E2E_MODEL not set - skipping the GPU library test");
+        return;
+    };
+
+    let out_dir = var("LMS_E2E_OUT").unwrap_or_else(|| PathBuf::from("/tmp/lms-e2e"));
+    fs::create_dir_all(&out_dir).unwrap();
+
+    let cuda = out_dir.join("ggml-cuda.so");
+    let vulkan = out_dir.join("ggml-vulkan.so");
+    fs::write(&cuda, vec![0x7fu8; 8192]).unwrap();
+    fs::write(&vulkan, vec![0x7fu8; 6144]).unwrap();
+
+    let output = out_dir.join("stories15M-gpu.llamafile");
+    fs::copy(&runtime, &output).unwrap();
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let config = CompileConfig {
+        base_runtime: runtime.to_string_lossy().to_string(),
+        model: model.to_string_lossy().to_string(),
+        output: output.to_string_lossy().to_string(),
+        execution_mode: "chat".to_string(),
+        host: "127.0.0.1".to_string(),
+        port: 18082,
+        gpu_layers: 99,
+        ctx_size: 2048,
+        threads: 4,
+        system_prompt: String::new(),
+        mmproj: String::new(),
+        gpu_libs: vec![
+            cuda.to_string_lossy().to_string(),
+            vulkan.to_string_lossy().to_string(),
+        ],
+        stop_tokens: Vec::new(),
+        extra_args: String::new(),
+    };
+
+    // Plugins are discovered by the loader and must not leak into `.args`.
+    let preview = args::build(&config);
+    assert!(preview.errors.is_empty(), "unexpected errors: {:?}", preview.errors);
+    assert!(!preview.text.contains("ggml-cuda.so"));
+    assert_eq!(preview.lines.last().map(String::as_str), Some("..."));
+
+    let libraries = llamafile_studio_lib::gpu::validate(&config.gpu_libs).expect("valid plugins");
+    assert_eq!(libraries.len(), 2);
+    assert_eq!(libraries[0].backend, "cuda");
+    assert_eq!(libraries[1].backend, "vulkan");
+
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&output)
+        .unwrap();
+    file.seek(std::io::SeekFrom::End(0)).unwrap();
+
+    let mut zip = StoredZipWriter::new(&mut file, ZIP_ALIGNMENT).unwrap();
+    zip.add_bytes(args::ARGS_ENTRY, preview.text.as_bytes()).unwrap();
+    let model_name = model
+        .file_name()
+        .expect("model has a file name")
+        .to_string_lossy()
+        .to_string();
+    zip.add_file(&model_name, &model, &mut |_: u64| {}).unwrap();
+    for library in &libraries {
+        let mut on_chunk = |_: u64| {};
+        zip.add_file(&library.file, std::path::Path::new(&library.path), &mut on_chunk)
+            .unwrap();
+    }
+    let summary = zip.finish().unwrap();
+    drop(file);
+
+    assert_eq!(summary.entries.len(), 4, ".args + weights + two plugins");
+    assert_eq!(summary.entries[2].name, "ggml-cuda.so");
+    assert_eq!(summary.entries[2].size, 8192);
+    assert_eq!(summary.entries[3].name, "ggml-vulkan.so");
+    for entry in &summary.entries {
+        assert_eq!(entry.data_offset % ZIP_ALIGNMENT, 0, "{} misaligned", entry.name);
+    }
+
+    let bytes = fs::read(&output).unwrap();
+    let footer = &bytes[bytes.len() - 22..];
+    assert_eq!(u16::from_le_bytes([footer[10], footer[11]]), 4);
+
+    println!(
+        "packaged GPU plugins into {} ({} bytes, {} entries)",
+        output.display(),
+        summary.total_size,
+        summary.entries.len()
+    );
+}
+
 /// Verifies that a vision projector becomes its own archive entry and is wired
 /// up from `.args`.
 ///
@@ -152,6 +251,7 @@ fn packages_a_vision_projector_alongside_weights() {
         threads: 4,
         system_prompt: String::new(),
         mmproj: projector.to_string_lossy().to_string(),
+        gpu_libs: Vec::new(),
         stop_tokens: Vec::new(),
         extra_args: String::new(),
     };
