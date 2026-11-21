@@ -123,6 +123,8 @@
       // never overwritten when the model changes.
       mmprojAuto: false,
       mmprojFor: "",
+      // Optional ggml-*.so / ggml-*.dll plugins appended to the archive.
+      gpuLibs: [],
       output: "",
       executionMode: "server",
       host: "127.0.0.1",
@@ -157,6 +159,7 @@
       state = Object.assign(defaultState(), saved);
       if (!Array.isArray(state.stopTokens)) state.stopTokens = [];
       if (!Array.isArray(state.hfFilters)) state.hfFilters = [];
+      if (!Array.isArray(state.gpuLibs)) state.gpuLibs = [];
     } catch (error) {
       console.warn("could not restore the previous session", error);
     }
@@ -346,6 +349,93 @@
     meta.className = "hint mt-1.5";
   }
 
+  /* -------------------------------------------------------- GPU libraries */
+
+  /** Badge metadata per backend, matching the names the Rust side reports. */
+  const GPU_BACKENDS = {
+    cuda: { label: "CUDA", tone: "success", hint: "NVIDIA GPUs through CUDA / cuBLAS." },
+    rocm: { label: "ROCm", tone: "purple", hint: "AMD GPUs through HIP / rocBLAS." },
+    vulkan: { label: "Vulkan", tone: "accent", hint: "Any Vulkan-capable GPU, including Intel." },
+    metal: { label: "Metal", tone: "neutral", hint: "Apple Silicon; normally built in." },
+    amx: { label: "AMX", tone: "neutral", hint: "Intel AMX CPU tiles." },
+    sycl: { label: "SYCL", tone: "neutral", hint: "Intel oneAPI." },
+    other: { label: "custom", tone: "neutral", hint: "A plugin llamafile may still probe." }
+  };
+
+  /** Renders the selected plugins with sizes, backend badges and problems. */
+  async function renderGpuLibs() {
+    const list = $("gpuLibList");
+    if (!list) return;
+    const badge = $("gpuLibsBadge");
+    const paths = state.gpuLibs.slice();
+    list.innerHTML = "";
+
+    if (!paths.length) {
+      badge.textContent = "none";
+      badge.className = "chip shrink-0 border-line bg-window/60 text-[11px] text-inkfaint";
+      list.appendChild(
+        el("p", "hint", "No plugins bundled — the runtime uses whatever it already carries, or the CPU.")
+      );
+      return;
+    }
+
+    let info = [];
+    try {
+      info = await invoke("inspect_gpu_libs", { paths });
+    } catch (error) {
+      console.warn("could not inspect the GPU libraries", error);
+    }
+
+    const total = info.reduce((sum, entry) => sum + (entry.size || 0), 0);
+    badge.textContent = `${paths.length} · ${formatBytes(total)}`;
+    badge.className = "chip shrink-0 border-line bg-window/60 text-[11px] text-inksoft";
+
+    paths.forEach((path, index) => {
+      const entry = info[index] || {
+        file: baseName(path),
+        size: 0,
+        valid: true,
+        problem: null,
+        backend: "other",
+        platform: ""
+      };
+      const meta = GPU_BACKENDS[entry.backend] || GPU_BACKENDS.other;
+      const row = el(
+        "div",
+        "flex flex-wrap items-center gap-2 rounded-adwaita border border-line bg-window px-2.5 py-1.5"
+      );
+      const tag = badgeNode(meta.label, meta.tone, meta.hint);
+      tag.classList.add("font-mono");
+      row.appendChild(tag);
+      row.appendChild(
+        el("span", "min-w-0 flex-1 truncate font-mono text-[11.5px] text-inksoft", entry.file)
+      );
+      if (entry.platform) {
+        row.appendChild(
+          el("span", "text-[11px] text-inkfaint", entry.platform === "windows" ? ".dll" : ".so")
+        );
+      }
+      row.appendChild(el("span", "font-mono text-[11.5px] text-inkmuted", formatBytes(entry.size)));
+      if (!entry.valid) {
+        row.appendChild(badgeNode("unusable", "warning", entry.problem || ""));
+      }
+      const remove = el("button", "btn-secondary shrink-0 px-2.5 py-1 text-[11.5px]", "Remove");
+      remove.setAttribute("aria-label", `Remove ${entry.file}`);
+      remove.addEventListener("click", async () => {
+        state.gpuLibs.splice(index, 1);
+        persist();
+        await renderGpuLibs();
+        refreshOutputMeta();
+        schedulePreview();
+      });
+      row.appendChild(remove);
+      if (!entry.valid && entry.problem) {
+        row.appendChild(el("p", "hint w-full text-warning", entry.problem));
+      }
+      list.appendChild(row);
+    });
+  }
+
   function refreshOutputMeta() {
     const meta = $("outputMeta");
     if (!state.output) {
@@ -355,7 +445,8 @@
     }
     const likeModel = baseName(state.model);
     const likeProjector = state.mmproj ? baseName(state.mmproj) : "";
-    const parts = ["runtime", likeModel, likeProjector, ".args"].filter(Boolean);
+    const likeGpuLibs = state.gpuLibs.map((path) => baseName(path));
+    const parts = ["runtime", likeModel, likeProjector, ...likeGpuLibs, ".args"].filter(Boolean);
     meta.textContent = `Will write ${baseName(state.output)}${
       likeModel ? ` (${parts.join(" + ")})` : ""
     }. Existing files are replaced.`;
@@ -373,6 +464,7 @@
       baseRuntime: state.baseRuntime,
       model: state.model,
       mmproj: state.mmproj,
+      gpuLibs: state.gpuLibs.slice(),
       output: state.output,
       executionMode: state.executionMode,
       host: state.host,
@@ -628,6 +720,7 @@
     $("hfTarget").value = state.hfTarget;
     $("argsPane").hidden = !state.showArgs;
     $("argsToggle").setAttribute("aria-expanded", String(state.showArgs));
+    renderGpuLibs();
   }
 
   function bindTabs() {
@@ -771,6 +864,51 @@
 
     $("mmprojPath").addEventListener("change", (event) => {
       attachMmproj(event.target.value.trim(), false);
+    });
+
+    $("btnAddGpuLibs").addEventListener("click", async () => {
+      const button = $("btnAddGpuLibs");
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.textContent = "Opening…";
+      try {
+        const picked = await invoke("pick_paths", {
+          kind: "gpu",
+          startIn: state.gpuLibs.length
+            ? parentDir(state.gpuLibs[0])
+            : state.baseRuntime
+            ? parentDir(state.baseRuntime)
+            : null
+        });
+        if (picked && picked.length) {
+          // One archive entry per name: silently collapsing two different files
+          // would hide which build ended up in the executable.
+          const known = new Set(state.gpuLibs.map((path) => baseName(path).toLowerCase()));
+          const added = [];
+          const skipped = [];
+          picked.forEach((path) => {
+            const file = baseName(path);
+            if (known.has(file.toLowerCase())) {
+              skipped.push(file);
+              return;
+            }
+            known.add(file.toLowerCase());
+            state.gpuLibs.push(path);
+            added.push(file);
+          });
+          persist();
+          await renderGpuLibs();
+          refreshOutputMeta();
+          schedulePreview();
+          if (added.length) toast("success", "GPU libraries added", added.join(", "));
+          if (skipped.length) toast("info", "Already selected", skipped.join(", "));
+        }
+      } catch (error) {
+        toast("error", "File picker failed", String(error));
+      } finally {
+        button.disabled = false;
+        button.innerHTML = original;
+      }
     });
 
     // Jump to the model browser from the Files tab.
@@ -1900,6 +2038,7 @@
     await refreshModelMeta();
     await autoPairMmproj({ quiet: true });
     await refreshMmprojMeta();
+    await renderGpuLibs();
     await renderPreview();
   }
 

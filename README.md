@@ -42,7 +42,7 @@ so no external `zipalign` binary is required at build time or run time.
 
 | Area | What you get |
 | --- | --- |
-| **Files** | Runtime picker + one-click GitHub download with live progress, `.gguf`-filtered model picker, optional `mmproj` vision projector picker, save dialog for the output |
+| **Files** | Runtime picker + one-click GitHub download with live progress, `.gguf`-filtered model picker, optional `mmproj` vision projector picker, optional `ggml-*.so` / `ggml-*.dll` GPU plugin picker, save dialog for the output |
 | **Models** | Hugging Face search over GGUF repositories, capability badges (tool calling, thinking, vision, MoE, code, multilingual), per-quantisation sizes with a RAM fit hint, a cancellable download with a progress bar, and a downloads manager that lists cached files with sizes and deletes them |
 | **Persona** | 8 000-character prompt canvas with live line/character count, six pre-baked archetypes (Software Architect, Creative Storyteller, Strict JSON Extractor, Medical Scribe, Socratic Tutor, Linux Sysadmin), dynamic stop-token chips |
 | **Settings** | `--server` / `--chat` toggle, host + port binder, GPU offload slider 0–120, context selector (2K–16K) with memory-aware warnings, CPU threads defaulting to *physical cores − 2* detected via `num_cpus` |
@@ -152,6 +152,18 @@ than kept. Downloading a vision model that has no projector on disk surfaces
 that repository's projector list directly in the Files tab, so the download
 becomes an attached projector without going back to the browser.
 
+### GPU libraries
+
+llamafile does not link GPU support statically: it loads CUDA, ROCm and Vulkan
+as plugins named `ggml-(cuda|rocm|vulkan).(so|dll)`, searching the executable's
+directory, its own bundle, `~/.llamafile/v/<version>` and `$HOME`. The **Files**
+tab accepts any number of `ggml-*.so` / `ggml-*.dll` files and appends each one
+at the archive root — the layout `zipalign -j0 llamafile ggml-cuda.so` produces —
+page aligned like the weights. The selection is validated (prefix, extension,
+lowercase loadable name, no duplicate entry names), the library sizes join the
+progress total, and every plugin appears in the build report. Leave the list
+empty to ship the runtime exactly as downloaded.
+
 ### Downloaded cache
 
 The download folder doubles as the cache. Every time results or a repository are
@@ -217,6 +229,7 @@ would refuse.
 ui/                     index.html, main.js, Tailwind source + built CSS
 src-tauri/src/lib.rs    Tauri commands: system info, dialogs, validation, pipeline
 src-tauri/src/args.rs   .args generation + validation (unit tested)
+src-tauri/src/gpu.rs    GPU backend plugin validation (unit tested)
 src-tauri/src/zipwriter.rs  stored/page-aligned/ZIP64 ZIP appender (unit tested)
 src-tauri/src/runtime.rs    GitHub release discovery + streaming download
 scripts/                icon generation, AppImage build

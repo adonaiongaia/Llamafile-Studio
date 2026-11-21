@@ -22,6 +22,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 pub mod args;
+pub mod gpu;
 pub mod hf;
 mod runtime;
 pub mod zipwriter;
@@ -154,6 +155,46 @@ async fn pick_folder(app: AppHandle, start_in: Option<String>) -> Result<Option<
     .map_err(|error| format!("the folder dialog could not be opened: {error}"))?;
 
     Ok(picked)
+}
+
+/// Opens the native GTK file chooser for several files at once.
+///
+/// GPU backends are often kept together in one folder (CUDA + Vulkan), and a
+/// hand-built backend can consist of more than one plugin, so the picker
+/// accepts a batch instead of forcing one dialog per library.
+#[tauri::command]
+async fn pick_paths(
+    app: AppHandle,
+    kind: String,
+    start_in: Option<String>,
+) -> Result<Option<Vec<String>>, String> {
+    let handle = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+
+        let mut builder = handle.dialog().file();
+        builder = match kind.as_str() {
+            "gpu" => builder.add_filter("GPU backend library", &["so", "dll"]),
+            _ => builder.add_filter("All files", &["*"]),
+        };
+        if let Some(dir) = start_in.as_deref() {
+            let path = Path::new(dir);
+            if path.is_dir() {
+                builder = builder.set_directory(path);
+            }
+        }
+
+        builder.blocking_pick_files().map(|paths| {
+            paths
+                .into_iter()
+                .filter_map(file_path_to_string)
+                .collect::<Vec<_>>()
+        })
+    })
+    .await
+    .map_err(|error| format!("the file dialog could not be opened: {error}"))?;
+
+    Ok(picked.filter(|paths| !paths.is_empty()))
 }
 
 /// Opens the native GTK file chooser.
@@ -372,6 +413,10 @@ fn validate_paths(config: &CompileConfig) -> Result<Vec<String>, String> {
         );
     }
 
+    // Optional GPU backend plugins: validated like any other input, but an
+    // empty list simply means "ship the runtime as downloaded".
+    let gpu_libs = gpu::validate(&config.gpu_libs)?;
+
     // Optional vision projector: validated exactly like the model, but never
     // required. It is embedded as a second archive entry and referenced from
     // `.args` with `--mmproj /zip/<name>`.
@@ -430,6 +475,14 @@ fn validate_paths(config: &CompileConfig) -> Result<Vec<String>, String> {
         }
         if normalise(projector) == normalise(&model) {
             return Err("the vision projector must differ from the model".to_string());
+        }
+    }
+    for library in &gpu_libs {
+        if normalise(&output) == normalise(Path::new(&library.path)) {
+            return Err(format!(
+                "the output file must differ from the GPU library {}",
+                library.file
+            ));
         }
     }
 
@@ -566,14 +619,20 @@ fn run_pipeline(
         Some(path) => fs::metadata(path).map_err(|e| e.to_string())?.len(),
         None => 0,
     };
+    let gpu_libs = gpu::validate(&config.gpu_libs)?;
+    let gpu_size: u64 = gpu_libs.iter().map(|library| library.size).sum();
     let persona = config.system_prompt.trim().to_string();
     let persona_bytes_len = if preview.embeds_persona {
         persona.len() as u64 + 1
     } else {
         0
     };
-    let total =
-        base_size + model_size + mmproj_size + preview.text.len() as u64 + persona_bytes_len;
+    let total = base_size
+        + model_size
+        + mmproj_size
+        + gpu_size
+        + preview.text.len() as u64
+        + persona_bytes_len;
 
     let mut reporter = Reporter::new(app.clone(), total);
     let mut log: Vec<String> = Vec::new();
@@ -587,6 +646,14 @@ fn run_pipeline(
             "Vision projector: {} ({})",
             path.display(),
             human_size(mmproj_size)
+        ));
+    }
+    for library in &gpu_libs {
+        log.push(format!(
+            "GPU library: {} ({}, {})",
+            library.file,
+            library.backend,
+            human_size(library.size)
         ));
     }
     let copied = copy_runtime(&base, &output, &mut reporter)?;
@@ -643,6 +710,22 @@ fn run_pipeline(
             zip.add_file(&projector_name, projector, &mut on_chunk)?;
         }
         log.push(format!("{projector_name} appended (vision projector)"));
+    }
+
+    // GPU plugins live at the archive root under their own names, which is the
+    // layout `zipalign -j0 llamafile ggml-cuda.so` produces and what llamafile's
+    // loader searches for. Alignment is harmless for a shared object and keeps
+    // every entry uniform.
+    if !gpu_libs.is_empty() {
+        reporter.stage("packing", "Embedding GPU backend libraries…");
+        for library in &gpu_libs {
+            let mut on_chunk = |bytes: u64| reporter.advance(bytes);
+            zip.add_file(&library.file, Path::new(&library.path), &mut on_chunk)?;
+            log.push(format!(
+                "{} appended (GPU backend: {})",
+                library.file, library.backend
+            ));
+        }
     }
 
     reporter.stage("finalising", "Writing the ZIP central directory…");
@@ -840,6 +923,7 @@ mod tests {
             threads: 4,
             system_prompt: String::new(),
             mmproj: String::new(),
+            gpu_libs: Vec::new(),
             stop_tokens: Vec::new(),
             extra_args: String::new(),
         }
@@ -896,8 +980,10 @@ pub fn run() {
             system_info,
             inspect_path,
             pick_path,
+            pick_paths,
             pick_folder,
             preview_args,
+            gpu::inspect_gpu_libs,
             compile,
             reveal_in_file_manager,
             save_build_report,
